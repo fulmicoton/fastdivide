@@ -63,7 +63,7 @@ extern crate test;
 //
 //  This file is not the original library, it is an attempt to port part
 //  of it to rust.
-// 
+//
 const LIBDIVIDE_ADD_MARKER: u8 = 0x40;
 const LIBDIVIDE_U64_SHIFT_PATH: u8 = 0x80;
 const LIBDIVIDE_64_SHIFT_MASK: u8 = 0x3F;
@@ -100,7 +100,7 @@ impl DividerU64 {
         if divisor & (divisor - 1) == 0 {
             DividerU64 {
                 magic: 0u64,
-                more: floor_log_2_d | LIBDIVIDE_U64_SHIFT_PATH
+                more: floor_log_2_d | LIBDIVIDE_U64_SHIFT_PATH,
             }
         } else {
             let u = 1u128 << (floor_log_2_d + 64);
@@ -130,14 +130,12 @@ impl DividerU64 {
     pub fn divide(&self, n: u64) -> u64 {
         if self.more & LIBDIVIDE_U64_SHIFT_PATH != 0 {
             n >> (self.more & LIBDIVIDE_64_SHIFT_MASK)
-        }
-        else {
+        } else {
             let q = libdivide_mullhi_u64(self.magic, n);
             if self.more & LIBDIVIDE_ADD_MARKER != 0 {
                 let t = ((n - q) >> 1).wrapping_add(q);
                 t >> (self.more & LIBDIVIDE_64_SHIFT_MASK)
-            }
-            else {
+            } else {
                 q >> self.more
             }
         }
@@ -155,10 +153,10 @@ mod tests {
     #[test]
     fn test_libdivide() {
         for d in (1u64..100u64)
-            .chain(vec![2048, 234234131223u64].into_iter())
-            .chain((5..63).map(|i| 1 << i)) {
+                .chain(vec![2048, 234234131223u64].into_iter())
+                .chain((5..63).map(|i| 1 << i)) {
             let divider = DividerU64::divide_by(d);
-            for i in (0u64..10_000).chain(vec![2048, 234234131223u64,  1 << 43,  1 << 43 + 1]) {
+            for i in (0u64..10_000).chain(vec![2048, 234234131223u64, 1 << 43, 1 << 43 + 1]) {
                 assert_eq!(divider.divide(i), i / d);
             }
 
@@ -168,18 +166,18 @@ mod tests {
     #[bench]
     fn bench_normal_divide(b: &mut Bencher) {
         let q: u64 = test::black_box(112u64);
-        b.iter(|| { 
-            let n: u64 = test::black_box(152342341u64);
-            n / q
-        })
+        b.iter(|| {
+                   let n: u64 = test::black_box(152342341u64);
+                   n / q
+               })
     }
 
     #[bench]
     fn bench_fast_divide(b: &mut Bencher) {
         let fast_divider = DividerU64::divide_by(112u64);
-        b.iter(|| { 
-            let n: u64 = test::black_box(152342341u64);
-            fast_divider.divide(n)
-        })
+        b.iter(|| {
+                   let n: u64 = test::black_box(152342341u64);
+                   fast_divider.divide(n)
+               })
     }
 }
