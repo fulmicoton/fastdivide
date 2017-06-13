@@ -2,8 +2,9 @@
 name = "fastdivide"
 version = "0.1.0"
 authors = ["Paul Masurel <paul.masurel@gmail.com>"]
-license = "zlib"
+license = "ZLib"
 description = """Fastdivide is a partial port of libdivide. It makes it possible to reduce the cost of divisions."""
-
+categories = ["database-implementations", "data-structures"]
+readme = "README.md"
 
 [dependencies]
