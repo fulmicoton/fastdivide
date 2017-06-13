@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/fulmicoton/fastdivide.svg?branch=master)](https://travis-ci.org/fulmicoton/fastdivide)
+
 # FastDivide...
 
 FastDivide is a simple/partial RUST port of [libdivide](https://libdivide.com/) by ridiculous_fish
