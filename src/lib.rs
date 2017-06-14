@@ -108,17 +108,17 @@ impl DividerU64 {
             let reminder: u64 = (u - proposed_m * divisor as u128) as u64;
             assert!(reminder > 0 && reminder < divisor);
             let e: u64 = divisor - reminder;
-            let more: u8;
-            if e < (1u64 << floor_log_2_d) {
-                more = floor_log_2_d;
-            } else {
-                proposed_m += proposed_m;
-                let twice_rem = reminder * 2;
-                if twice_rem >= divisor || twice_rem < reminder {
-                    proposed_m += 1;
-                }
-                more = floor_log_2_d | LIBDIVIDE_ADD_MARKER;
-            }
+            let more: u8 =
+                if e < (1u64 << floor_log_2_d) {
+                    floor_log_2_d
+                } else {
+                    proposed_m += proposed_m;
+                    let twice_rem = reminder * 2;
+                    if twice_rem >= divisor || twice_rem < reminder {
+                        proposed_m += 1;
+                    }
+                    floor_log_2_d | LIBDIVIDE_ADD_MARKER
+                };
             DividerU64 {
                 more: more,
                 magic: (proposed_m as u64) + 1u64,
@@ -126,6 +126,7 @@ impl DividerU64 {
         }
     }
 
+    #[allow(unknown_lints, inline_always)]
     #[inline(always)]
     pub fn divide(&self, n: u64) -> u64 {
         if self.more & LIBDIVIDE_U64_SHIFT_PATH != 0 {
