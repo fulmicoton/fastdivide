@@ -1,6 +1,6 @@
 [package]
 name = "fastdivide"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Paul Masurel <paul.masurel@gmail.com>"]
 license = "zlib-acknowledgement"
 description = """Fastdivide is a partial port of libdivide. It makes it possible to reduce the cost of divisions."""
