@@ -1,21 +1,28 @@
 /*!
 # Yes, but what is it really ?
 
-Division is a very costly operation for your CPU.
-You may have noticed that when the divisor is known at compile time, your compiler transforms the operations into a cryptic combination of
+Division is a very costly operation for your CPU (probably between 10
+and 40 cycles).
+
+You may have noticed that when the divisor is known at compile time,
+your compiler transforms the operations into a cryptic combination of
 a multiplication and bitshift.
 
-Fastdivide is about doing the same trick your compiler uses but 
-when the divisor is unknown at compile time. 
-Of course, it requires preprocessing a datastructure that is 
-specific to your divisor, and using it only makes sense if 
-this preprocessing is amortized by a high number of division (with the 
+Fastdivide is about doing the same trick your compiler uses but
+when the divisor is unknown at compile time.
+Of course, it requires preprocessing a datastructure that is
+specific to your divisor, and using it only makes sense if
+this preprocessing is amortized by a high number of division (with the
 same divisor).
 
 # When is it useful ?
 
-If you do a lot (> 10) of division with the same divisor ; and this division is a bottleneck in your program.
+You should probably use `fastdivide`, if you do a lot (> 10) of division with the same divisor ;
+and these divisions are a bottleneck in your program.
+
 This is for instance useful to compute histograms.
+
+
 
 # Example
 
@@ -23,14 +30,14 @@ This is for instance useful to compute histograms.
 use fastdivide::DividerU64;
 
 fn histogram(vals: &[u64], min: u64, interval: u64, output: &mut [usize]) {
-    
+
     // Preprocessing a datastructure dedicated
     // to dividing `u64` by `interval`.
     //
     // This preprocessing is not cheap.
     let divide = DividerU64::divide_by(interval);
-    
-    // We reuse the same `Divider` for all of the 
+
+    // We reuse the same `Divider` for all of the
     // values in vals.
     for &val in vals {
         if val < min {
@@ -38,7 +45,7 @@ fn histogram(vals: &[u64], min: u64, interval: u64, output: &mut [usize]) {
         }
         let bucket_id = divide.divide(val - min) as usize;
         if bucket_id < output.len() {
-            output[bucket_id as usize] += 1; 
+            output[bucket_id as usize] += 1;
         }
     }
 }
@@ -50,7 +57,6 @@ fn histogram(vals: &[u64], min: u64, interval: u64, output: &mut [usize]) {
 # assert_eq!(output[2], 0);
 
 ```
-
 
 */
 
@@ -68,17 +74,6 @@ const LIBDIVIDE_ADD_MARKER: u8 = 0x40;
 const LIBDIVIDE_U64_SHIFT_PATH: u8 = 0x80;
 const LIBDIVIDE_64_SHIFT_MASK: u8 = 0x3F;
 
-fn count_leading_zeros(mut val: u64) -> u8 {
-    if val == 0 {
-        return 64;
-    }
-    let mut result = 0u8;
-    while (val & (1u64 << 63)) == 0 {
-        val <<= 1;
-        result += 1;
-    }
-    result
-}
 
 #[derive(Debug)]
 pub struct DividerU64 {
@@ -96,7 +91,7 @@ fn libdivide_mullhi_u64(x: u64, y: u64) -> u64 {
 impl DividerU64 {
     pub fn divide_by(divisor: u64) -> DividerU64 {
         assert!(divisor > 0u64);
-        let floor_log_2_d: u8 = 63u8 - count_leading_zeros(divisor);
+        let floor_log_2_d: u8 = 63u8 - (divisor.leading_zeros() as u8);
         if divisor & (divisor - 1) == 0 {
             DividerU64 {
                 magic: 0u64,
@@ -108,17 +103,16 @@ impl DividerU64 {
             let reminder: u64 = (u - proposed_m * divisor as u128) as u64;
             assert!(reminder > 0 && reminder < divisor);
             let e: u64 = divisor - reminder;
-            let more: u8 =
-                if e < (1u64 << floor_log_2_d) {
-                    floor_log_2_d
-                } else {
-                    proposed_m += proposed_m;
-                    let twice_rem = reminder * 2;
-                    if twice_rem >= divisor || twice_rem < reminder {
-                        proposed_m += 1;
-                    }
-                    floor_log_2_d | LIBDIVIDE_ADD_MARKER
-                };
+            let more: u8 = if e < (1u64 << floor_log_2_d) {
+                floor_log_2_d
+            } else {
+                proposed_m += proposed_m;
+                let twice_rem = reminder * 2;
+                if twice_rem >= divisor || twice_rem < reminder {
+                    proposed_m += 1;
+                }
+                floor_log_2_d | LIBDIVIDE_ADD_MARKER
+            };
             DividerU64 {
                 more: more,
                 magic: (proposed_m as u64) + 1u64,
@@ -154,8 +148,9 @@ mod tests {
     #[test]
     fn test_libdivide() {
         for d in (1u64..100u64)
-                .chain(vec![2048, 234234131223u64].into_iter())
-                .chain((5..63).map(|i| 1 << i)) {
+            .chain(vec![2048, 234234131223u64].into_iter())
+            .chain((5..63).map(|i| 1 << i))
+        {
             let divider = DividerU64::divide_by(d);
             for i in (0u64..10_000).chain(vec![2048, 234234131223u64, 1 << 43, 1 << 43 + 1]) {
                 assert_eq!(divider.divide(i), i / d);
@@ -168,17 +163,17 @@ mod tests {
     fn bench_normal_divide(b: &mut Bencher) {
         let q: u64 = test::black_box(112u64);
         b.iter(|| {
-                   let n: u64 = test::black_box(152342341u64);
-                   n / q
-               })
+            let n: u64 = test::black_box(152342341u64);
+            n / q
+        })
     }
 
     #[bench]
     fn bench_fast_divide(b: &mut Bencher) {
         let fast_divider = DividerU64::divide_by(112u64);
         b.iter(|| {
-                   let n: u64 = test::black_box(152342341u64);
-                   fast_divider.divide(n)
-               })
+            let n: u64 = test::black_box(152342341u64);
+            fast_divider.divide(n)
+        })
     }
 }
