@@ -60,7 +60,6 @@ fn histogram(vals: &[u64], min: u64, interval: u64, output: &mut [usize]) {
 
 */
 
-
 // ported from  libdivide.h by ridiculous_fish
 //
 //  This file is not the original library, it is an attempt to port part
@@ -69,7 +68,6 @@ fn histogram(vals: &[u64], min: u64, interval: u64, output: &mut [usize]) {
 const LIBDIVIDE_ADD_MARKER: u8 = 0x40;
 const LIBDIVIDE_U64_SHIFT_PATH: u8 = 0x80;
 const LIBDIVIDE_64_SHIFT_MASK: u8 = 0x3F;
-
 
 #[derive(Debug)]
 pub struct DividerU64 {
@@ -82,7 +80,6 @@ fn libdivide_mullhi_u64(x: u64, y: u64) -> u64 {
     let yl = y as u128;
     ((xl * yl) >> 64) as u64
 }
-
 
 impl DividerU64 {
     pub fn divide_by(divisor: u64) -> DividerU64 {
@@ -133,8 +130,6 @@ impl DividerU64 {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::DividerU64;
@@ -149,7 +144,6 @@ mod tests {
             for i in (0u64..10_000).chain(vec![2048, 234234131223u64, 1 << 43, 1 << 43 + 1]) {
                 assert_eq!(divider.divide(i), i / d);
             }
-
         }
     }
 

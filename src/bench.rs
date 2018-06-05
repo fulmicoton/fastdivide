@@ -1,7 +1,7 @@
 #![feature(test)]
 
-extern crate test;
 extern crate fastdivide;
+extern crate test;
 
 use fastdivide::DividerU64;
 use test::Bencher;
