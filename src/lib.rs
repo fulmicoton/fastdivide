@@ -69,7 +69,7 @@ const LIBDIVIDE_ADD_MARKER: u8 = 0x40;
 const LIBDIVIDE_U64_SHIFT_PATH: u8 = 0x80;
 const LIBDIVIDE_64_SHIFT_MASK: u8 = 0x3F;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct DividerU64 {
     magic: u64,
     more: u8,
