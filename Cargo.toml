@@ -7,6 +7,9 @@ description = """Fastdivide is a partial port of libdivide. It makes it possible
 categories = ["database-implementations", "data-structures"]
 readme = "README.md"
 
+[features]
+std = []
+
 [dependencies]
 
 [[bench]]

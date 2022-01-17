@@ -59,6 +59,14 @@ fn histogram(vals: &[u64], min: u64, interval: u64, output: &mut [usize]) {
 ```
 
 */
+#![no_std]
+
+#[cfg(feature = "std")]
+extern crate std;
+
+#[cfg(test)]
+#[macro_use]
+extern crate std;
 
 // ported from  libdivide.h by ridiculous_fish
 //
