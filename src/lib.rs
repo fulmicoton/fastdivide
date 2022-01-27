@@ -72,67 +72,97 @@ extern crate std;
 //
 //  This file is not the original library, it is an attempt to port part
 //  of it to rust.
-//
-const LIBDIVIDE_ADD_MARKER: u8 = 0x40;
-const LIBDIVIDE_U64_SHIFT_PATH: u8 = 0x80;
-const LIBDIVIDE_64_SHIFT_MASK: u8 = 0x3F;
 
-#[derive(Debug, Clone, Copy)]
-pub struct DividerU64 {
-    magic: u64,
-    more: u8,
+// This algorithm is described in https://ridiculousfish.com/blog/posts/labor-of-division-episode-i.html
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DividerU64 {
+    Fast { magic: u64, shift: u8 },
+    BitShift(u8),
+    General { magic_low: u64, shift: u8 },
 }
 
+#[inline(always)]
 fn libdivide_mullhi_u64(x: u64, y: u64) -> u64 {
     let xl = x as u128;
     let yl = y as u128;
     ((xl * yl) >> 64) as u64
 }
 
+#[inline(always)]
+fn is_power_of_2(n: u64) -> bool {
+    n & (n - 1) == 0
+}
+
 impl DividerU64 {
-    pub fn divide_by(divisor: u64) -> DividerU64 {
-        assert!(divisor > 0u64);
+    fn power_of_2_division(divisor: u64) -> Option<DividerU64> {
         let floor_log_2_d: u8 = 63u8 - (divisor.leading_zeros() as u8);
-        if divisor & (divisor - 1) == 0 {
-            DividerU64 {
-                magic: 0u64,
-                more: floor_log_2_d | LIBDIVIDE_U64_SHIFT_PATH,
-            }
-        } else {
-            let u = 1u128 << (floor_log_2_d + 64);
-            let mut proposed_m: u128 = u / divisor as u128;
-            let reminder: u64 = (u - proposed_m * divisor as u128) as u64;
-            assert!(reminder > 0 && reminder < divisor);
-            let e: u64 = divisor - reminder;
-            let more: u8 = if e < (1u64 << floor_log_2_d) {
-                floor_log_2_d
-            } else {
-                proposed_m += proposed_m;
-                let twice_rem = reminder * 2;
-                if twice_rem >= divisor || twice_rem < reminder {
-                    proposed_m += 1;
-                }
-                floor_log_2_d | LIBDIVIDE_ADD_MARKER
-            };
-            DividerU64 {
-                more: more,
-                magic: (proposed_m as u64) + 1u64,
-            }
+        if is_power_of_2(divisor) {
+            // Divisor is a power of 2.
+            // We can just do a bit shift.
+            return Some(DividerU64::BitShift(floor_log_2_d));
+        }
+        None
+    }
+
+    fn fast_path(divisor: u64) -> Option<DividerU64> {
+        if is_power_of_2(divisor) {
+            return None;
+        }
+        let floor_log_2_d: u8 = 63u8 - (divisor.leading_zeros() as u8);
+        let u = 1u128 << (floor_log_2_d + 64);
+        let proposed_magic_number: u128 = u / divisor as u128;
+        let reminder: u64 = (u - proposed_magic_number * (divisor as u128)) as u64;
+        assert!(reminder > 0 && reminder < divisor);
+        let e: u64 = divisor - reminder;
+        // This is a sufficient condition for our 64-bits magic number
+        // condition to work as described in
+        // See https://ridiculousfish.com/blog/posts/labor-of-division-episode-i.html
+        if e >= (1u64 << floor_log_2_d) {
+            return None;
+        }
+        Some(DividerU64::Fast {
+            magic: (proposed_magic_number as u64) + 1u64,
+            shift: floor_log_2_d,
+        })
+    }
+
+    fn general_path(divisor: u64) -> DividerU64 {
+        assert!(!is_power_of_2(divisor));
+        // p=⌈log2d⌉
+        let p: u8 = 64u8 - (divisor.leading_zeros() as u8);
+        // m=⌈2^{64+p} / d⌉. This is a 33 bit number, so keep only the low 32 bits.
+        // we do a little dance to avoid the overflow if p = 64.
+        let e = 1u128 << (63 + p);
+        let m = 2 + (e + (e - divisor as u128)) / divisor as u128;
+        DividerU64::General {
+            magic_low: m as u64,
+            shift: p - 1,
         }
     }
 
-    #[allow(unknown_lints, inline_always)]
+    pub fn divide_by(divisor: u64) -> DividerU64 {
+        assert!(divisor > 0u64);
+        Self::power_of_2_division(divisor)
+            .or_else(|| DividerU64::fast_path(divisor))
+            .unwrap_or_else(|| DividerU64::general_path(divisor))
+    }
+
     #[inline(always)]
     pub fn divide(&self, n: u64) -> u64 {
-        if self.more & LIBDIVIDE_U64_SHIFT_PATH != 0 {
-            n >> (self.more & LIBDIVIDE_64_SHIFT_MASK)
-        } else {
-            let q = libdivide_mullhi_u64(self.magic, n);
-            if self.more & LIBDIVIDE_ADD_MARKER != 0 {
+        match *self {
+            DividerU64::BitShift(d) => n >> d,
+            DividerU64::Fast { magic, shift } => {
+                // The divisor has a magic number that is lower than 32 bits.
+                // We get away with a multiplication and a bit-shift.
+                libdivide_mullhi_u64(magic, n) >> shift
+            }
+            DividerU64::General { magic_low, shift } => {
+                // magic only contains the low 64 bits of our actual magic number which actually has a 65 bits.
+                // The following dance computes n * (magic + 2^64) >> shift
+                let q = libdivide_mullhi_u64(magic_low, n);
                 let t = ((n - q) >> 1).wrapping_add(q);
-                t >> (self.more & LIBDIVIDE_64_SHIFT_MASK)
-            } else {
-                q >> self.more
+                t >> shift
             }
         }
     }
@@ -141,6 +171,69 @@ impl DividerU64 {
 #[cfg(test)]
 mod tests {
     use super::DividerU64;
+    use proptest::prelude::*;
+
+    #[test]
+    fn test_divide_by_4() {
+        let divider = DividerU64::divide_by(4);
+        assert!(matches!(divider, DividerU64::BitShift(2)));
+    }
+
+    #[test]
+    fn test_divide_by_7() {
+        let divider = DividerU64::divide_by(7);
+        assert!(matches!(divider, DividerU64::General { .. }));
+    }
+
+    #[test]
+    fn test_divide_by_11() {
+        let divider = DividerU64::divide_by(11);
+        assert_eq!(
+            divider,
+            DividerU64::Fast {
+                magic: 13415813871788764812,
+                shift: 3
+            }
+        );
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100000))]
+        #[test]
+        fn test_proptest(n in 0..u64::MAX, d in 1..u64::MAX) {
+            let divider = DividerU64::divide_by(d);
+            let quotient = divider.divide(n);
+            assert_eq!(quotient, n / d);
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100000))]
+        #[test]
+        fn test_proptest_divide_by_7(n in 0..u64::MAX) {
+            let divider = DividerU64::divide_by(7);
+            let quotient = divider.divide(n);
+            assert_eq!(quotient, n / 7);
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(10000))]
+        #[test]
+        fn test_proptest_divide_by_11(n in 0..u64::MAX) {
+            let divider = DividerU64::divide_by(11);
+            let quotient = divider.divide(n);
+            assert_eq!(quotient, n / 11);
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(10000))]
+        #[test]
+        fn test_proptest_divide_by_any(d in 1..u64::MAX) {
+            DividerU64::divide_by(d);
+        }
+    }
 
     #[test]
     fn test_libdivide() {
@@ -154,5 +247,4 @@ mod tests {
             }
         }
     }
-
 }
