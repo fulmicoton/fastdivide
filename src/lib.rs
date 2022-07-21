@@ -168,10 +168,27 @@ impl DividerU64 {
     }
 }
 
+impl core::ops::Div<DividerU64> for u64 {
+    type Output = u64;
+
+    fn div(self, denom: DividerU64) -> Self::Output {
+        denom.divide(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::DividerU64;
     use proptest::prelude::*;
+
+    #[test]
+    fn test_divide_op() {
+        let divider = DividerU64::divide_by(2);
+        let res = 4u64 / divider;
+        assert_eq!(res, 2);
+        let res = 8u64 / divider;
+        assert_eq!(res, 4);
+    }
 
     #[test]
     fn test_divide_by_4() {
