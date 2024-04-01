@@ -89,27 +89,30 @@ fn libdivide_mullhi_u64(x: u64, y: u64) -> u64 {
     ((xl * yl) >> 64) as u64
 }
 
+
 #[inline(always)]
-fn is_power_of_2(n: u64) -> bool {
-    n & (n - 1) == 0
+fn floor_log2(n: u64) -> u8 {
+    assert_ne!(n, 0);
+    63u8 - (n.leading_zeros() as u8)
 }
 
 impl DividerU64 {
     fn power_of_2_division(divisor: u64) -> Option<DividerU64> {
-        let floor_log_2_d: u8 = 63u8 - (divisor.leading_zeros() as u8);
-        if is_power_of_2(divisor) {
-            // Divisor is a power of 2.
-            // We can just do a bit shift.
-            return Some(DividerU64::BitShift(floor_log_2_d));
+        if divisor == 0 {
+            return None;
         }
-        None
+        if !divisor.is_power_of_two() {
+            return None;
+        }
+        // Divisor is a power of 2. We can just do a bit shift.
+        Some(DividerU64::BitShift(floor_log2(divisor)))
     }
 
     fn fast_path(divisor: u64) -> Option<DividerU64> {
-        if is_power_of_2(divisor) {
+        if divisor.is_power_of_two() {
             return None;
         }
-        let floor_log_2_d: u8 = 63u8 - (divisor.leading_zeros() as u8);
+        let floor_log_2_d: u8 = floor_log2(divisor);
         let u = 1u128 << (floor_log_2_d + 64);
         let proposed_magic_number: u128 = u / divisor as u128;
         let reminder: u64 = (u - proposed_magic_number * (divisor as u128)) as u64;
@@ -128,7 +131,6 @@ impl DividerU64 {
     }
 
     fn general_path(divisor: u64) -> DividerU64 {
-        assert!(!is_power_of_2(divisor));
         // p=⌈log2d⌉
         let p: u8 = 64u8 - (divisor.leading_zeros() as u8);
         // m=⌈2^{64+p} / d⌉. This is a 33 bit number, so keep only the low 32 bits.
@@ -151,12 +153,12 @@ impl DividerU64 {
     #[inline(always)]
     pub fn divide(&self, n: u64) -> u64 {
         match *self {
-            DividerU64::BitShift(d) => n >> d,
             DividerU64::Fast { magic, shift } => {
                 // The divisor has a magic number that is lower than 32 bits.
                 // We get away with a multiplication and a bit-shift.
                 libdivide_mullhi_u64(magic, n) >> shift
             }
+            DividerU64::BitShift(d) => n >> d,
             DividerU64::General { magic_low, shift } => {
                 // magic only contains the low 64 bits of our actual magic number which actually has a 65 bits.
                 // The following dance computes n * (magic + 2^64) >> shift
@@ -171,6 +173,7 @@ impl DividerU64 {
 impl core::ops::Div<DividerU64> for u64 {
     type Output = u64;
 
+    #[inline(always)]
     fn div(self, denom: DividerU64) -> Self::Output {
         denom.divide(self)
     }
@@ -213,6 +216,19 @@ mod tests {
             }
         );
     }
+
+
+    #[test]
+    fn test_floor_log2() {
+        for i in [1, 2, 3, 4, 10, 15, 16, 31, 32, 33, u64::MAX] {
+            let log_i = super::floor_log2(i);
+            let lower_bound = 1 << log_i;
+            let upper_bound = lower_bound - 1 + lower_bound;
+            assert!(lower_bound <= i);
+            assert!(upper_bound >= i);
+        }
+    }
+
 
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(100000))]
