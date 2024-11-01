@@ -2,7 +2,7 @@
 name = "fastdivide"
 version = "0.4.1"
 authors = ["Paul Masurel <paul.masurel@gmail.com>"]
-license = "zlib-acknowledgement"
+license = "zlib-acknowledgement OR MIT"
 description = """Fastdivide is a partial port of libdivide. It makes it possible to reduce the cost of divisions."""
 categories = ["database-implementations", "data-structures"]
 repository = "https://github.com/fulmicoton/fastdivide"
