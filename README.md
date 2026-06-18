@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/fulmicoton/fastdivide.svg?branch=master)](https://travis-ci.org/fulmicoton/fastdivide)
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/fulmicoton/fastdivide?utm_source=badge)
 
 # FastDivide...
 
