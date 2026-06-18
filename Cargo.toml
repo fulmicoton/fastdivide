@@ -13,11 +13,13 @@ edition = "2018"
 std = []
 
 [dev-dependencies]
+bencher = { version = "4.7.0", package = "codspeed-bencher-compat" }
 proptest = "1"
 
 [[bench]]
 name = "bench-divide"
-path = "./src/bench.rs"
+path = "./benches/bench-divide.rs"
+harness = false
 test = false
 bench = true
 
