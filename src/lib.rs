@@ -89,7 +89,6 @@ fn libdivide_mullhi_u64(x: u64, y: u64) -> u64 {
     ((xl * yl) >> 64) as u64
 }
 
-
 #[inline(always)]
 fn floor_log2(n: u64) -> u8 {
     assert_ne!(n, 0);
@@ -217,7 +216,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn test_floor_log2() {
         for i in [1, 2, 3, 4, 10, 15, 16, 31, 32, 33, u64::MAX] {
@@ -228,7 +226,6 @@ mod tests {
             assert!(upper_bound >= i);
         }
     }
-
 
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(100000))]
@@ -278,6 +275,143 @@ mod tests {
             for i in (0u64..10_000).chain(vec![2048, 234234131223u64, 1 << 43, 1 << 43 + 1]) {
                 assert_eq!(divider.divide(i), i / d);
             }
+        }
+    }
+}
+
+/// Fast modulo algorithm from <https://onlinelibrary.wiley.com/doi/10.1002/spe.2689>.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModulusU64 {
+    /// divisor
+    d: u64,
+    /// `(1 << 128).div_ceil(d)`
+    c: u128,
+}
+
+impl ModulusU64 {
+    /// # Panics
+    ///
+    /// Panics if modulus `d` is `0`.
+    #[inline(always)]
+    pub const fn new(d: u64) -> Self {
+        assert!(d != 0);
+        let c = (u128::MAX / d as u128).wrapping_add(1);
+
+        Self { d, c }
+    }
+
+    /// Calculates `x % self`.
+    #[inline(always)]
+    pub fn modulo(&self, x: u64) -> u64 {
+        let (hi, lo) = {
+            let x = self.c.wrapping_mul(x as u128);
+            ((x >> 64) as u64, x as u64)
+        };
+        // [hi:lo] * d >> 128
+        hi.carrying_mul(self.d, libdivide_mullhi_u64(self.d, lo)).1
+    }
+
+    /// Checks whether `x` is divisible by `self`.
+    #[inline(always)]
+    pub const fn can_divide(&self, x: u64) -> bool {
+        // x % d = 0 <=> x * c (mod 2^128) < c
+        self.c.wrapping_mul(x as u128) <= self.c.wrapping_sub(1)
+    }
+}
+
+impl core::ops::Rem<ModulusU64> for u64 {
+    type Output = u64;
+
+    fn rem(self, rhs: ModulusU64) -> Self::Output {
+        rhs.modulo(self)
+    }
+}
+
+#[cfg(test)]
+mod test_modulus {
+    use super::ModulusU64;
+    use proptest::prelude::*;
+
+    #[test]
+    fn power_of_two() {
+        for d in std::iter::successors(Some(1_u64), |d| d.checked_mul(2)) {
+            let modulus = ModulusU64::new(d);
+
+            for x in std::iter::successors(Some(1_u64), |d| d.checked_mul(2)) {
+                assert_eq!(modulus.modulo(x), x % d)
+            }
+
+            assert_eq!(modulus.modulo(!0), !0 % d)
+        }
+    }
+
+    #[test]
+    fn small() {
+        for d in 1..1 << 10 {
+            let modulus = ModulusU64::new(d);
+
+            for x in 0..2 << 10 {
+                assert_eq!(modulus.modulo(x), x % d)
+            }
+        }
+    }
+
+    #[test]
+    fn large() {
+        for d in (1..=u64::MAX).rev().take(1 << 10) {
+            let modulus = ModulusU64::new(d);
+
+            for x in
+                std::iter::successors(Some(0_u64), |&x| Some(x.wrapping_mul(x).wrapping_add(2)))
+                    .take(5 << 10)
+            {
+                assert_eq!(modulus.modulo(x), x % d)
+            }
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(50 << 10))]
+        #[test]
+        fn random_modulo(d in 1..=u64::MAX, x: u64) {
+            let modulus = ModulusU64::new(d);
+
+            assert_eq!(modulus.modulo(x), x%d)
+        }
+    }
+
+    #[test]
+    fn divisible_small() {
+        for d in 1..1 << 10 {
+            let modulus = ModulusU64::new(d);
+
+            for x in 0..2 << 10 {
+                assert_eq!(modulus.can_divide(x), x % d == 0, "{x} % {d}")
+            }
+        }
+    }
+
+    #[test]
+    fn divisible_large() {
+        for d in (1..=u64::MAX).rev().take(1 << 10) {
+            let modulus = ModulusU64::new(d);
+
+            for x in
+                std::iter::successors(Some(0_u64), |&x| Some(x.wrapping_mul(x).wrapping_add(2)))
+                    .take(5 << 10)
+            {
+                assert_eq!(modulus.can_divide(x), x % d == 0)
+            }
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(1 << 15))]
+        #[test]
+        fn random_divisible(d in 1..=u64::MAX, x: u64) {
+            let modulus = ModulusU64::new(d);
+
+            assert_eq!(modulus.can_divide(x), x%d==0)
         }
     }
 }
